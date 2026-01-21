@@ -79,7 +79,7 @@ MAX_CONTRACT_LIMIT=50   # Maximum contracts per trade
 
 | Feature | Description |
 |---------|-------------|
-| **Multi-Source Confirmation** | Requires NWS and METAR to agree within 2°F before accepting a reading |
+| **Dual-Source Weather** | Fetches both NWS and METAR, uses the higher reading for faster detection |
 | **Safety Buffers** | Below markets: +0.5°F buffer, Between markets: +1°F buffer |
 | **Staleness Check** | Rejects weather data older than 90 minutes to prevent trading on stale info |
 | **Circuit Breaker** | Automatically stops trading if session loss exceeds 50% |

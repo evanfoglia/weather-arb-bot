@@ -230,7 +230,7 @@ class WeatherClient:
         return True
     
     async def get_current_observation(self, city: str) -> Optional[WeatherObservation]:
-        """Get the most recent observation for a city, requiring multi-source confirmation."""
+        """Get the most recent observation for a city, using the higher reading."""
         if city not in CITIES:
             logger.error(f"Unknown city: {city}")
             return None
@@ -249,28 +249,14 @@ class WeatherClient:
         if metar_obs and not self._is_fresh(metar_obs):
             metar_obs = None
         
-        # Multi-source confirmation: require both sources to agree within 2°F
+        # Use the higher reading (max temp only goes up, so higher is more current)
         if metar_obs and nws_obs:
-            diff = abs(metar_obs.temperature_f - nws_obs.temperature_f)
-            if diff <= 2.0:
-                # Sources agree - use higher reading for faster opportunity detection
-                if metar_obs.temperature_f >= nws_obs.temperature_f:
-                    return metar_obs
-                return nws_obs
-            else:
-                logger.warning(
-                    f"⚠️ {city.upper()}: Sources disagree by {diff:.1f}°F "
-                    f"(NWS: {nws_obs.temperature_f:.1f}°F, METAR: {metar_obs.temperature_f:.1f}°F) — skipping"
-                )
-                return None
+            if metar_obs.temperature_f >= nws_obs.temperature_f:
+                return metar_obs
+            return nws_obs
         
-        # Fallback: if only one source available, use it with warning
-        if metar_obs or nws_obs:
-            obs = metar_obs or nws_obs
-            logger.debug(f"{city}: Only {obs.source.upper()} available, using single source")
-            return obs
-        
-        return None
+        # Fallback: use whichever is available
+        return metar_obs or nws_obs
     
     async def update_max_temp(self, city: str) -> Tuple[float, Optional[WeatherObservation]]:
         """

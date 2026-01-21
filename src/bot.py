@@ -406,8 +406,10 @@ async def main():
     # Load config
     config = load_config()
     
-    # Override with command line args
-    if args.live:
+    # Override with command line args (--paper takes precedence over --live)
+    if args.paper and not args.live:
+        config.mode = "paper"
+    elif args.live:
         config.mode = "live"
     if args.interval:
         config.poll_interval = args.interval
