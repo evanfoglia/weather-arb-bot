@@ -145,7 +145,9 @@ class KalshiClient:
         # Pattern: ">X°" (greater than - ABOVE market)
         gt_match = re.search(r'>(\d+)°?', text)
         if gt_match:
-            return (float(gt_match.group(1)), None, 'above')
+            # >64 means >= 65 (integers)
+            val = float(gt_match.group(1))
+            return (val + 1.0, None, 'above')
         
         # Pattern: "<X°" (less than - BELOW market)  
         lt_match = re.search(r'<(\d+)°?', text)
@@ -417,3 +419,31 @@ class KalshiClient:
             logger.error(f"Balance check error: {e}")
             
         return 0
+
+    async def get_market_positions(self) -> List[str]:
+        """
+        Get list of market tickers where we currently hold a position.
+        Used to populate traded_tickers on startup to prevent double-buying.
+        """
+        endpoint = "/portfolio/positions"
+        url = f"{KALSHI_TRADING_API_BASE}{endpoint}"
+        
+        try:
+            headers = self._get_headers("GET", f"/trade-api/v2{endpoint}")
+            
+            async with self.session.get(url, headers=headers) as resp:
+                data = await resp.json()
+                
+                if resp.status == 200:
+                    positions = data.get("positions", [])
+                    # Return all tickers found in the positions list
+                    log_tickers = [p['ticker'] for p in positions]
+                    logger.info(f"📋 Found {len(log_tickers)} existing positions on Kalshi")
+                    return log_tickers
+                else:
+                    logger.error(f"Failed to fetch positions: {resp.status}")
+                    return []
+                    
+        except Exception as e:
+            logger.error(f"Error fetching positions: {e}")
+            return []

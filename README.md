@@ -9,40 +9,30 @@ Kalshi offers prediction markets like: *"Will the high temperature in Chicago be
 The key insight: **Daily maximum temperature can only go UP, never down.** Once the high reaches 85°F at 2 PM, it's guaranteed to end at 85°F or higher.
 
 This bot:
-1. **Monitors real-time weather data** from NWS and METAR
-2. **Compares current max temps to market thresholds**
-3. **Identifies guaranteed winning trades** when outcomes are already locked
-4. **Executes trades automatically** (live or paper mode)
+1. **Monitors real-time weather data** from IEM, NWS, and METAR
+2. **Tracks daily max temperature** with full-day lookback from midnight
+3. **Compares current max temps to market thresholds**
+4. **Identifies guaranteed winning trades** when outcomes are already locked
+5. **Executes trades automatically** (live or paper mode)
 
 ---
 
 ## 📈 How It Makes Money
 
-### The Strategy
+### The Strategy: "Pure Arbitrage"
+The bot is now configured for **pure, risk-free arbitrage**. It does not speculate on future temperature rises. It only trades when the event has **already happened** according to official data.
 
-| Market Type | Example | Winning Condition | Our Trade |
-|-------------|---------|-------------------|-----------|
-| **Above** | "Above 85°F?" | Temp already ≥ 85°F | BUY YES |
-| **Below** | "Below 80°F?" | Temp already > 80°F | BUY NO |
-| **Between** | "81-84°F?" | Temp already > 85°F | BUY NO |
-
-### Example Trade
-
-```
-Market: "Will Chicago high be above 85°F?"
-Current max temp: 87°F  ← Already exceeded!
-YES price: 92¢
-
-Since 87°F ≥ 85°F, YES is GUARANTEED to win.
-Buy YES at 92¢ → Receive $1.00 at settlement → Profit: 8¢ per contract
-```
+| Market Type | Example | Winning Condition | Trade Action |
+|-------------|---------|-------------------|--------------|
+| **Above** | "Above 85°F?" | Temp ≥ 86.0°F (Threshold + 1.0°) | BUY YES |
+| **Below** | "Below 80°F?" | Temp > 81.0°F (Threshold + 1.0°) | BUY NO |
+| **Between** | "81-84°F?" | Temp > 85.0°F (High Limit + 1.0°) | BUY NO |
 
 ### Safety Buffers
+To ensure 100% win rate and avoid "bad beats" from sensor variance or minor data corrections, we apply a **strict +1.0°F safety buffer** to ALL trades.
 
-To avoid edge cases with temperature fluctuations:
-- **Above markets**: No buffer (locked once reached)
-- **Below markets**: +1°F buffer
-- **Between markets**: +1°F buffer
+- If the market is "High > 71°F", the bot waits for **72.0°F** (or higher) before buying YES.
+- It will NOT trade at 71.1°F, ensuring we are well clear of the "borderline" risk zone.
 
 ---
 
@@ -79,21 +69,20 @@ MAX_CONTRACT_LIMIT=50   # Maximum contracts per trade
 
 | Feature | Description |
 |---------|-------------|
-| **Dual-Source Weather** | Fetches both NWS and METAR, uses the higher reading for faster detection |
-| **Safety Buffers** | Below markets: +1°F buffer, Between markets: +1°F buffer |
-| **Staleness Check** | Rejects weather data older than 90 minutes to prevent trading on stale info |
-| **Circuit Breaker** | Automatically stops trading if session loss exceeds 50% |
+| **Triple-Source Weather** | Fetches IEM, NWS, and METAR, uses the highest reading |
+| **Full-Day Lookback** | IEM data from local midnight captures daily max even if current temp is lower |
+| **Safety Buffers** | +1°F buffer on ALL market types (above, below, between) |
+| **Circuit Breaker** | Automatically stops trading if session loss exceeds 20% |
 | **Balance Check** | Verifies sufficient funds before each trade |
 | **Duplicate Prevention** | Only trades each market once per session |
 | **Data Sanity Check** | Rejects implausible temperatures (-50°F to 140°F range) |
-| **Dynamic Polling** | Faster updates during peak heating hours (12-6 PM) |
-| **Trade Logging** | All trades saved to `trades.json` for review |
+| **Trade Logging** | All trades saved to `trades.json` with market title for review |
 
 ---
 
 ## 🏙️ Supported Markets
 
-The bot monitors weather markets for 13 cities:
+The bot monitors weather markets for 12 cities:
 
 | City | Ticker Prefix |
 |------|--------------|
@@ -103,7 +92,6 @@ The bot monitors weather markets for 13 cities:
 | Los Angeles | KXHIGHLAX |
 | Austin | KXHIGHAUS |
 | Denver | KXHIGHDEN |
-| Houston | KXHIGHOU |
 | Philadelphia | KXHIGHPHIL |
 | Washington DC | KXHIGHTDC |
 | Seattle | KXHIGHTSEA |
@@ -149,13 +137,13 @@ KALSHI_PRIVATE_KEY_PATH=kalshi.key
 TRADING_MODE=paper          # Start with paper mode!
 MAX_POSITION_SIZE=20        # Max dollars per trade
 MAX_CONTRACT_LIMIT=50       # Max contracts per trade
-MIN_EDGE=0.03               # Minimum 3% edge required
+MIN_EDGE=0.01               # Minimum 1% edge required
 
-# Cities to monitor
-CITIES=nyc,chicago,miami,la,austin,denver,houston,philly,dc,seattle,vegas,sf,nola
+# Cities to monitor (only those with active Kalshi markets)
+CITIES=miami,nyc,la,chicago,denver,philly,seattle,sf,vegas,dc,austin,nola
 
 # Poll interval (seconds)
-POLL_INTERVAL=300           # 5 minutes (60s during peak hours 12-6 PM)
+POLL_INTERVAL=30            # 30 seconds for near-real-time monitoring
 ```
 
 ### 3. Run the Bot
@@ -175,11 +163,11 @@ venv/bin/python3 src/bot.py --live
 ## 📊 Output Example
 
 ```
-21:05:32 | INFO     | 🌡️  CHICAGO: 87.2°F (max today: 87.2°F) via NWS @ 21:05
-21:05:32 | INFO     | 📊 Found 6 active markets for chicago (KXHIGHCHI)
-21:05:32 | INFO     | 🎯 CHICAGO | BUY_YES @ 4¢ (fair: 99¢, edge: 95.0¢) | Temp: 87.2°F vs threshold 85°F | CERTAIN
-21:05:33 | INFO     | ✅ ORDER PLACED: YES 50x KXHIGHCHI-26JAN20-T85
-21:05:33 | INFO     | ✅ TRADE: YES 50x KXHIGHCHI-26JAN20-T85 @ 4¢ (potential profit: $48.00)
+14:31:17 | INFO     | CHICAGO: METAR 87.2°F | NWS 87.0°F | IEM High 87.2°F @ 13:53
+14:31:18 | INFO     | 📊 Found 6 active markets for chicago (KXHIGHCHI)
+14:31:18 | INFO     | 🎯 CHICAGO | BUY_YES @ 4¢ (fair: 99¢, edge: 95.0¢) | Temp: 87.2°F vs threshold 85°F | CERTAIN
+14:31:19 | INFO     | ✅ ORDER PLACED: YES 50x KXHIGHCHI-26JAN20-T85
+14:31:19 | INFO     | ✅ TRADE: YES 50x KXHIGHCHI-26JAN20-T85 @ 4¢ (potential profit: $48.00)
 ```
 
 ---

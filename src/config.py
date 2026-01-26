@@ -148,5 +148,6 @@ def load_config() -> TradingConfig:
 # API endpoints
 NWS_API_BASE = "https://api.weather.gov"
 METAR_API_BASE = "https://aviationweather.gov/api/data"
+IEM_API_BASE = "https://mesonet.agron.iastate.edu"
 KALSHI_API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_TRADING_API_BASE = "https://api.elections.kalshi.com/trade-api/v2"

@@ -86,8 +86,9 @@ class ArbitrageEngine:
         if market.is_above_market and market.threshold_low is not None:
             threshold = market.threshold_low
             
-            if current_max_temp >= threshold:
-                # CERTAIN: Max temp already hit the threshold
+            # Add 1°F buffer to avoid edge cases with NWS/CLI variance
+            if current_max_temp >= threshold + 1:
+                # CERTAIN: Max temp clearly exceeded the threshold
                 # This market will settle YES - any ask below ~99¢ is profit
                 fair_value = 0.99  # Account for 1% fee buffer
                 edge = fair_value - market.yes_ask

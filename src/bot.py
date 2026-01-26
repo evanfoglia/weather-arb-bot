@@ -90,6 +90,15 @@ class WeatherArbitrageBot:
         logger.info(f"   Mode: {'PAPER' if self.config.mode == 'paper' else 'LIVE'}")
         if self.config.mode == "live":
             logger.info(f"   Inital Balance: ${self.stats['initial_live_balance']:.2f}")
+            
+            # Fetch existing positions to prevent double buying
+            try:
+                positions = await self.kalshi_client.get_market_positions()
+                for ticker in positions:
+                    self.traded_tickers.add(ticker)
+            except Exception as e:
+                logger.error(f"Failed to fetch initial positions: {e}")
+                
         logger.info(f"   Cities: {', '.join(self.config.cities)}")
         logger.info(f"   Min Edge: {self.config.min_edge * 100:.1f}%")
         logger.info(f"   Max Position: ${self.config.max_position_size}")
@@ -115,12 +124,6 @@ class WeatherArbitrageBot:
         if max_temp == float('-inf'):
             logger.warning(f"No temperature data for {city}")
             return []
-            
-        if obs:
-            logger.info(
-                f"🌡️  {city.upper()}: {obs.temperature_f:.1f}°F (max today: {max_temp:.1f}°F) "
-                f"via {obs.source.upper()}/{obs.station_id} @ {obs.timestamp.strftime('%H:%M')}"
-            )
         
         # Get active markets
         markets = await self.kalshi_client.get_weather_markets(city)
@@ -178,14 +181,27 @@ class WeatherArbitrageBot:
         # Determine side
         side = "yes" if opp.action == "BUY_YES" else "no"
         
-        # Execute order
-        result = await self.kalshi_client.place_order(
-            ticker=opp.ticker,
-            side=side,
-            quantity=quantity,
-            limit_price=price_cents,
-            is_paper=is_paper
-        )
+        # Mark as traded BEFORE execution to prevent race conditions
+        self.traded_tickers.add(opp.ticker)
+        
+        try:
+            # Execute order
+            result = await self.kalshi_client.place_order(
+                ticker=opp.ticker,
+                side=side,
+                quantity=quantity,
+                limit_price=price_cents,
+                is_paper=is_paper
+            )
+            
+            if not result.success:
+                # If failed, remove from traded set so we can retry later
+                self.traded_tickers.remove(opp.ticker)
+                
+        except Exception:
+            # If exception, remove from traded set
+            self.traded_tickers.remove(opp.ticker)
+            raise
         
         if result.success:
             # Track paper balance and P&L
@@ -231,6 +247,7 @@ class WeatherArbitrageBot:
         # Add new trade
         trade_record = {
             "ticker": opp.ticker,
+            "market_title": opp.market_title,
             "city": opp.city,
             "side": side,
             "quantity": quantity,
@@ -345,12 +362,8 @@ class WeatherArbitrageBot:
                 if scan_count % 5 == 0:
                     await self.print_status()
                 
-                # Dynamic polling interval: faster during peak heating hours (12-6 PM)
-                current_hour = datetime.now().hour
-                if 12 <= current_hour < 18:
-                    poll_interval = 60  # 1 minute during peak
-                else:
-                    poll_interval = self.config.poll_interval  # Default off-peak
+                # Use configured poll interval (30s)
+                poll_interval = self.config.poll_interval
                 
                 # Wait before next scan (responsively)
                 try:
