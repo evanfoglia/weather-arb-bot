@@ -14,14 +14,14 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 # Trading hours (EST)
-START_HOUR = 6   # 6 AM
+START_HOUR = 4   # 4 AM
 END_HOUR = 23    # 11 PM
 
 # Timezone
 EST = ZoneInfo("America/New_York")
 
 def is_trading_hours():
-    """Check if current time is within trading hours (6 AM - 11 PM EST)."""
+    """Check if current time is within trading hours (4 AM - 11 PM EST)."""
     now = datetime.now(EST)
     return START_HOUR <= now.hour < END_HOUR
 
@@ -29,7 +29,7 @@ def wait_until_start():
     """Wait until trading hours begin."""
     while not is_trading_hours():
         now = datetime.now(EST)
-        print(f"⏰ [{now.strftime('%I:%M %p')}] Outside trading hours. Waiting for 6:00 AM EST...")
+        print(f"⏰ [{now.strftime('%I:%M %p')}] Outside trading hours. Waiting for 4:00 AM EST...")
         time.sleep(60)  # Check every minute
 
 def run_bot():
@@ -74,7 +74,7 @@ def main():
     """Main loop: wait for trading hours, run bot, repeat."""
     print("=" * 60)
     print("🌤️  SCHEDULED BOT RUNNER")
-    print("   Trading Hours: 6:00 AM - 11:00 PM EST")
+    print("   Trading Hours: 4:00 AM - 11:00 PM EST")
     print("=" * 60)
     
     while True:

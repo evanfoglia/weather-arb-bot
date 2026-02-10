@@ -74,6 +74,9 @@ class WeatherArbitrageBot:
         # Track tickers we've already traded to prevent duplicate orders
         self.traded_tickers: set = set()
         
+        # Load previously traded tickers from trades.json on startup
+        self._load_traded_tickers_from_file()
+        
     async def init(self):
         """Initialize all clients."""
         await self.weather_client.init()
@@ -107,6 +110,41 @@ class WeatherArbitrageBot:
         logger.info(f"   Circuit Breaker: {self.max_loss_pct * 100:.0f}% max loss")
         logger.info("=" * 60)
         
+    def _load_traded_tickers_from_file(self):
+        """Load tickers from trades.json to prevent re-trading across restarts."""
+        trades_file = "trades.json"
+        if os.path.exists(trades_file):
+            try:
+                with open(trades_file, "r") as f:
+                    data = json.load(f)
+                for trade in data.get("trades", []):
+                    ticker = trade.get("ticker", "")
+                    if ticker:
+                        self.traded_tickers.add(ticker)
+                logger.info(f"📋 Loaded {len(self.traded_tickers)} previously traded tickers from trades.json")
+            except Exception as e:
+                logger.warning(f"Could not load trades.json for dedup: {e}")
+    
+    def _is_already_traded(self, ticker: str) -> bool:
+        """Check if a ticker has already been traded (in-memory + file check)."""
+        if ticker in self.traded_tickers:
+            return True
+        
+        # Double-check trades.json as a safety net
+        trades_file = "trades.json"
+        if os.path.exists(trades_file):
+            try:
+                with open(trades_file, "r") as f:
+                    data = json.load(f)
+                for trade in data.get("trades", []):
+                    if trade.get("ticker") == ticker:
+                        self.traded_tickers.add(ticker)  # Cache it
+                        return True
+            except Exception:
+                pass
+        
+        return False
+    
     async def close(self):
         """Cleanup all clients."""
         await self.weather_client.close()
@@ -139,9 +177,9 @@ class WeatherArbitrageBot:
     
     async def execute_opportunity(self, opp: ArbitrageOpportunity) -> bool:
         """Execute a trade on an arbitrage opportunity."""
-        # Skip if we've already traded this ticker this session
-        if opp.ticker in self.traded_tickers:
-            logger.info(f"⏭️  Skipping {opp.ticker} - already traded this session")
+        # Skip if we've already traded this ticker (persistent check)
+        if self._is_already_traded(opp.ticker):
+            logger.info(f"⏭️  Skipping {opp.ticker} - already traded")
             return False
         
         is_paper = self.config.mode == "paper"
@@ -195,12 +233,11 @@ class WeatherArbitrageBot:
             )
             
             if not result.success:
-                # If failed, remove from traded set so we can retry later
-                self.traded_tickers.remove(opp.ticker)
+                # Keep ticker in traded set to prevent retry on same market
+                logger.warning(f"Order failed for {opp.ticker}, will not retry")
                 
         except Exception:
-            # If exception, remove from traded set
-            self.traded_tickers.remove(opp.ticker)
+            # Keep ticker in traded set to prevent retry
             raise
         
         if result.success:

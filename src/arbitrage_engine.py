@@ -86,8 +86,8 @@ class ArbitrageEngine:
         if market.is_above_market and market.threshold_low is not None:
             threshold = market.threshold_low
             
-            # Add 1°F buffer to avoid edge cases with NWS/CLI variance
-            if current_max_temp >= threshold + 1:
+            # Add 1.0°F buffer to account for NWS rounding (°C→°F can inflate up to 0.9°F)
+            if current_max_temp >= threshold + 1.0:
                 # CERTAIN: Max temp clearly exceeded the threshold
                 # This market will settle YES - any ask below ~99¢ is profit
                 fair_value = 0.99  # Account for 1% fee buffer
@@ -138,8 +138,8 @@ class ArbitrageEngine:
         if market.is_below_market and market.threshold_high is not None:
             threshold = market.threshold_high
             
-            # Add 1°F buffer to avoid edge cases with NWS/METAR variance
-            if current_max_temp > threshold + 1:
+            # Add 1.0°F buffer to account for NWS rounding (°C→°F can inflate up to 0.9°F)
+            if current_max_temp > threshold + 1.0:
                 # CERTAIN: Max temp clearly exceeded the threshold
                 # This market will settle NO - buy NO at any price below ~99¢
                 fair_value = 0.99
@@ -167,8 +167,8 @@ class ArbitrageEngine:
             high = market.threshold_high
             
             if low is not None and high is not None:
-                # Add 1°F buffer for between markets to avoid edge cases
-                if current_max_temp > high + 1:
+                # Add 1.0°F buffer to account for NWS rounding (°C→°F can inflate up to 0.9°F)
+                if current_max_temp > high + 1.0:
                     # CERTAIN: Max temp clearly exceeded the range
                     # This market will settle NO
                     fair_value = 0.99

@@ -111,6 +111,34 @@ CITIES: Dict[str, CityConfig] = {
         weather_station="KMSY",
         metar_id="KMSY",
         timezone="America/Chicago"
+    ),
+    "boston": CityConfig(
+        name="Boston",
+        series_ticker="KXHIGHTBOS",
+        weather_station="KBOS",
+        metar_id="KBOS",
+        timezone="America/New_York"
+    ),
+    "atlanta": CityConfig(
+        name="Atlanta",
+        series_ticker="KXHIGHTATL",
+        weather_station="KATL",
+        metar_id="KATL",
+        timezone="America/New_York"
+    ),
+    "phoenix": CityConfig(
+        name="Phoenix",
+        series_ticker="KXHIGHTPHX",
+        weather_station="KPHX",
+        metar_id="KPHX",
+        timezone="America/Phoenix"
+    ),
+    "minneapolis": CityConfig(
+        name="Minneapolis",
+        series_ticker="KXHIGHTMIN",
+        weather_station="KMSP",
+        metar_id="KMSP",
+        timezone="America/Chicago"
     )
 }
 

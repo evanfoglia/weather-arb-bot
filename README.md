@@ -74,8 +74,9 @@ MAX_CONTRACT_LIMIT=50   # Maximum contracts per trade
 | **Safety Buffers** | +1°F buffer on ALL market types (above, below, between) |
 | **Circuit Breaker** | Automatically stops trading if session loss exceeds 20% |
 | **Balance Check** | Verifies sufficient funds before each trade |
-| **Duplicate Prevention** | Only trades each market once per session |
+| **Duplicate Prevention** | Never trades the same market twice (persistent tracking via `trades.json`) |
 | **Data Sanity Check** | Rejects implausible temperatures (-50°F to 140°F range) |
+| **Rounding Protection** | Parses METAR precision temps (tenth-degree) + 1.0°F buffer to stop NWS rounding inflation |
 | **Trade Logging** | All trades saved to `trades.json` with market title for review |
 
 ---
@@ -108,6 +109,12 @@ Since a "Daily High" is a **monotonic** value (it can never go down, only up):
   - Current METAR: 82°F (it cooled down)
   - **Bot Decision**: The Daily High is **88°F**.
 - This guarantees we never "miss" a winning bet just because the temperature dropped later in the day.
+
+### 4. Handling NWS Rounding
+NWS data undergoes a rounding chain (Sensor °C → Whole °C → Whole °F) that can inflate temperatures by up to **0.9°F**. The bot combats this with two layers of protection:
+
+1. **METAR Precision Parsing**: The bot parses the raw METAR remarks (T-group) to get temperature with **tenth-of-degree precision** (e.g. `30.6°C`), bypassing the whole-degree rounding entirely.
+2. **1.0°F Safety Buffer**: A strict **1.0°F buffer** is applied to all thresholds (instead of 0.7°F) to ensure that even if we rely on rounded NWS data, we are safely above the settlement value.
 
 ---
 

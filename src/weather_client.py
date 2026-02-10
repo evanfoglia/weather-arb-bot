@@ -229,8 +229,19 @@ class WeatherClient:
                 if temp_c is None:
                     logger.warning(f"No temperature in METAR for {station_id}")
                     return None
-                    
-                temp_f = (temp_c * 9/5) + 32
+                
+                # Try to get precision temp from remarks T-group first
+                raw = metar.get("rawOb", "")
+                precision_temp_c = self._parse_metar_precision_temp(raw)
+                
+                if precision_temp_c is not None:
+                    # Use precision reading — avoids whole-°C rounding
+                    rounded_f = (temp_c * 9/5) + 32
+                    temp_f = (precision_temp_c * 9/5) + 32
+                    if abs(rounded_f - temp_f) > 0.3:
+                        logger.info(f"🔬 METAR precision for {station_id}: {temp_f:.1f}°F (rounded was {rounded_f:.1f}°F, diff {rounded_f - temp_f:+.1f}°F)")
+                else:
+                    temp_f = (temp_c * 9/5) + 32
                 
                 # Parse observation time
                 obs_time = metar.get("obsTime")
@@ -316,6 +327,27 @@ class WeatherClient:
             return float(temp_str)
         return None
     
+    def _parse_metar_precision_temp(self, raw_metar: str) -> Optional[float]:
+        """
+        Parse precision temperature from METAR remarks T-group.
+        
+        The T-group in METAR remarks contains temperature to tenth-of-degree C.
+        Format: T[s]xxx[s]xxx where s=0 (positive) or s=1 (negative), xxx = temp*10
+        Example: T30610183 = temp 30.6°C, dewpoint 18.3°C
+                 T10320108 = temp -3.2°C, dewpoint -10.8°C (1 prefix = negative)
+        
+        Returns temperature in Celsius with tenth-degree precision, or None.
+        """
+        match = re.search(r'\bT(\d{4})(\d{4})\b', raw_metar)
+        if match:
+            temp_raw = match.group(1)
+            # First digit: 0 = positive, 1 = negative
+            sign = -1 if temp_raw[0] == '1' else 1
+            temp_c = sign * int(temp_raw[1:]) / 10.0
+            return temp_c
+        return None
+    
+
     def _is_fresh(self, obs: WeatherObservation) -> bool:
         """Check if observation is fresh enough to use (within 90 mins)."""
         if not obs:
