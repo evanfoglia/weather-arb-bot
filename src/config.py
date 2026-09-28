@@ -65,7 +65,7 @@ CITIES: Dict[str, CityConfig] = {
     ),
     "houston": CityConfig(
         name="Houston",
-        series_ticker="KXHIGHOU",
+        series_ticker="KXHIGHTHOU",
         weather_station="KIAH",
         metar_id="KIAH",
         timezone="America/Chicago"
@@ -179,3 +179,4 @@ METAR_API_BASE = "https://aviationweather.gov/api/data"
 IEM_API_BASE = "https://mesonet.agron.iastate.edu"
 KALSHI_API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_TRADING_API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
+
