@@ -21,6 +21,7 @@ from typing import Dict, Optional, Tuple, List
 from zoneinfo import ZoneInfo
 
 from config import CITIES, NWS_API_BASE, METAR_API_BASE, IEM_API_BASE, CityConfig
+from reading_validation import ReadingValidator
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class WeatherObservation:
     timestamp: datetime
     temperature_f: float
     source: str  # 'nws' or 'metar'
+    unit_code: Optional[str] = None  # raw unit label from the API, when provided
 
 
 @dataclass 
@@ -62,6 +64,8 @@ class WeatherClient:
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
         self.max_trackers: Dict[str, DailyMaxTracker] = {}
+        # Validates every reading BEFORE it can move the (monotonic) max tracker.
+        self._validator = ReadingValidator()
         
     async def init(self):
         """Initialize the HTTP session."""
@@ -282,12 +286,19 @@ class WeatherClient:
                 data = await resp.json()
                 props = data.get("properties", {})
                 
-                # Temperature comes in Celsius from NWS
-                temp_c = props.get("temperature", {}).get("value")
+                # Temperature comes in Celsius from NWS - verify the unitCode
+                # rather than trusting convention, so a unit change fails closed
+                # instead of silently double-converting.
+                temp_props = props.get("temperature", {})
+                temp_c = temp_props.get("value")
+                unit_code = temp_props.get("unitCode")
                 if temp_c is None:
                     logger.warning(f"No temperature data from NWS for {station_id}")
                     return None
-                
+
+                if not ReadingValidator.check_unit(unit_code, "nws", station_id):
+                    return None
+
                 temp_f = (temp_c * 9/5) + 32
                 
                 # Parse timestamp
@@ -301,7 +312,8 @@ class WeatherClient:
                     station_id=station_id,
                     timestamp=timestamp,
                     temperature_f=temp_f,
-                    source="nws"
+                    source="nws",
+                    unit_code=unit_code
                 ) if self._is_plausible_temp(temp_f, f"NWS/{station_id}") else None
                 
                 if obs:
@@ -403,6 +415,11 @@ class WeatherClient:
             iem_task, nws_task, metar_task
         )
         
+        # Clean the IEM daily series BEFORE selecting the max. A unit flip
+        # mid-series would otherwise latch a false daily high for the day,
+        # and no buffer can defend against an error measured in tens of degrees.
+        iem_obs_list = self._validator.clean_series(iem_obs_list)
+
         # Get the highest reading from IEM for the whole day (no freshness filter)
         iem_max_obs = None
         if iem_obs_list:
@@ -413,15 +430,25 @@ class WeatherClient:
                 if obs_local.date() == today_local:
                     if iem_max_obs is None or obs.temperature_f > iem_max_obs.temperature_f:
                         iem_max_obs = obs
-        
+
         # Check freshness of other sources
         if nws_obs and not self._is_fresh(nws_obs):
             nws_obs = None
         if metar_obs and not self._is_fresh(metar_obs):
             metar_obs = None
-        
+
+        # Validate the "current" readings: each must pass its own
+        # rate-of-change check, and the survivors must agree with each other.
+        # (The IEM daily max is a different quantity - a lookback high - so it
+        # is validated via series cleaning above, not against current temps.)
+        # With systematic errors eliminated at the source, the arbitrage
+        # engine's small buffer only has to handle sensor noise again.
+        current_obs = self._validator.quorum_current(
+            city, [o for o in (metar_obs, nws_obs) if o is not None]
+        )
+
         # Collect all valid observations
-        all_obs = [obs for obs in [iem_max_obs, metar_obs, nws_obs] if obs is not None]
+        all_obs = [obs for obs in [iem_max_obs] + current_obs if obs is not None]
         
         if not all_obs:
             logger.warning(f"No valid observations for {city}")
